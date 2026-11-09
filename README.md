@@ -35,82 +35,89 @@ O modelo conceptual (Fase 1) está representado em **notação de Chen** em [`mo
 
 ```mermaid
 erDiagram
-    TIPO_QUARTO ||..o{ QUARTO : classifica
-    CLIENTE ||..o{ RESERVA : faz
-    FUNCIONARIO ||..o{ RESERVA : regista
-    RESERVA ||--|{ INCLUI : tem
-    QUARTO ||--o{ INCLUI : "e reservado em"
-    RESERVA ||..o{ PAGAMENTO : tem
-    RESERVA ||--o{ CONSUMO : "tem (identificador)"
-    SERVICO ||..o{ CONSUMO : "refere-se a"
+    tipo_quarto ||--o{ quarto : classifica
+    cliente ||--o{ reserva : faz
+    funcionario ||--o{ reserva : regista
+    reserva ||--|{ reserva_quarto : inclui
+    quarto ||--o{ reserva_quarto : "e reservado em"
+    reserva ||--o{ pagamento : tem
+    reserva ||--o{ consumo : "tem (identificador)"
+    servico ||--o{ consumo : "refere-se a"
 
-    TIPO_QUARTO {
-        identificador id_tipo PK
-        texto nome
-        texto descricao
-        numero capacidade_max
-        valor preco_base_noite
+    tipo_quarto {
+        INTEGER id_tipo PK
+        VARCHAR nome
+        TEXT descricao
+        INTEGER capacidade_max
+        NUMERIC preco_base_noite
     }
 
-    QUARTO {
-        identificador numero PK
-        numero andar
-        texto estado
+    quarto {
+        INTEGER numero PK
+        INTEGER andar
+        VARCHAR estado
+        INTEGER id_tipo FK
     }
 
-    CLIENTE {
-        identificador id_cliente PK
-        texto nome
-        texto n_documento
-        texto nif
-        texto email
-        texto telefone
-        texto nacionalidade
+    cliente {
+        INTEGER id_cliente PK
+        VARCHAR nome
+        VARCHAR n_documento UK
+        VARCHAR nif UK
+        VARCHAR email
+        VARCHAR telefone
+        VARCHAR nacionalidade
     }
 
-    FUNCIONARIO {
-        identificador id_funcionario PK
-        texto nome
-        texto funcao
+    funcionario {
+        INTEGER id_funcionario PK
+        VARCHAR nome
+        VARCHAR funcao
     }
 
-    RESERVA {
-        identificador id_reserva PK
-        data data_criacao
-        data data_entrada_prev
-        data data_saida_prev
-        texto estado
-        texto observacoes
-        valor total "derivado"
+    reserva {
+        INTEGER id_reserva PK
+        DATE data_criacao
+        DATE data_entrada_prev
+        DATE data_saida_prev
+        VARCHAR estado
+        TEXT observacoes
+        INTEGER id_cliente FK
+        INTEGER id_funcionario FK
     }
 
-    INCLUI {
-        valor preco_noite
-        numero n_hospedes
-        datahora data_checkin_real
-        datahora data_checkout_real
+    reserva_quarto {
+        INTEGER id_reserva PK, FK
+        INTEGER numero_quarto PK, FK
+        NUMERIC preco_noite
+        INTEGER n_hospedes
+        TIMESTAMP data_checkin_real
+        TIMESTAMP data_checkout_real
     }
 
-    SERVICO {
-        identificador id_servico PK
-        texto nome
-        texto descricao
-        valor preco_unitario
-        sim_nao ativo
+    servico {
+        INTEGER id_servico PK
+        VARCHAR nome
+        TEXT descricao
+        NUMERIC preco_unitario
+        BOOLEAN ativo
     }
 
-    PAGAMENTO {
-        identificador id_pagamento PK
-        datahora data_hora
-        valor valor
-        texto metodo
+    pagamento {
+        INTEGER id_pagamento PK
+        TIMESTAMP data_hora
+        NUMERIC valor
+        VARCHAR metodo
+        INTEGER id_reserva FK
     }
 
-    CONSUMO {
-        numero n_seq PK "chave parcial"
-        datahora data_hora
-        numero quantidade
-        valor preco_unitario
+    consumo {
+        INTEGER id_reserva PK, FK
+        INTEGER n_seq PK
+        TIMESTAMP data_hora
+        INTEGER quantidade
+        NUMERIC preco_unitario
+        INTEGER id_servico FK
     }
 ```
 

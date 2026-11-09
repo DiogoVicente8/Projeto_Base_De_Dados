@@ -93,7 +93,7 @@ erDiagram
 
 | Chen (`.drawio`) | Neste Mermaid |
 |---|---|
-| `INCLUI` é um **relacionamento N:M** com atributos | Aparece como **entidade associativa** `INCLUI`, porque o Mermaid não permite atributos em relacionamentos. Este é o ponto onde o diagrama já se aproxima do modelo relacional. |
+| `INCLUI` é um **relacionamento N:M** com atributos | Aparece como **entidade associativa** `INCLUI`, porque o Mermaid não permite atributos em relacionamentos. |
 | `CONSUMO` é **entidade fraca** | Marcada só pela linha contínua e pelo comentário "chave parcial". Não há símbolo de entidade fraca. |
 | Participação total (linha dupla) | Só se vê pela cardinalidade mínima (`||` e `|{` = total; `o{` = parcial). |
-| Atributo derivado (elipse tracejada) | Comentário "derivado" no atributo. |
+| Atributo derivado (elipse tracejada) | Comentário "derivado" no atributo. |       º                                                                                      
