@@ -136,3 +136,168 @@ Os scripts foram executados num PostgreSQL limpo (`drop.sql` seguido de `Table.s
 | Dois clientes com NIF nulo | Aceites | Aceites |
 
 Estes testes devem passar a ficar em `testes/` quando se fizerem os testes formais da Fase 3.
+
+---
+---
+
+# Fase 2: parte do João (serviços, consumos e pagamentos)
+
+Tabelas desta parte: `servico`, `pagamento` e `consumo` (entidade fraca `CONSUMO` do modelo conceptual), mais a vista `v_reserva_total` (atributo derivado `total`).
+Scripts: [`sql/servicos_pagamentos.sql`](../sql/servicos_pagamentos.sql), [`sql/vistas.sql`](../sql/vistas.sql), [`sql/run_all.sql`](../sql/run_all.sql) (corre tudo pela ordem certa) e [`sql/consultas_q08_q14.sql`](../sql/consultas_q08_q14.sql).
+Dados: [`dados/povoamento_servicos.sql`](../dados/povoamento_servicos.sql). Testes: [`testes/fase2_servicos_pagamentos.sql`](../testes/fase2_servicos_pagamentos.sql).
+
+---
+
+## 1. Modelo relacional
+
+```
+servico(id_servico, nome UK, descricao, preco_unitario, ativo)
+
+pagamento(id_pagamento, data_hora, valor, metodo, id_reserva)
+    id_reserva → reserva
+
+consumo(id_reserva, n_seq, data_hora, quantidade, preco_unitario, id_servico)
+    id_reserva → reserva
+    id_servico → servico
+```
+
+| Tabela | Chave primária | Chaves candidatas | Chaves estrangeiras |
+|---|---|---|---|
+| `servico` | `id_servico` | `nome` | n/a |
+| `pagamento` | `id_pagamento` | n/a | `id_reserva` |
+| `consumo` | `(id_reserva, n_seq)` | n/a | `id_reserva`, `id_servico` |
+
+| Atributo | Tipo SQL | Restrição |
+|---|---|---|
+| `servico.preco_unitario`, `consumo.preco_unitario` | `NUMERIC(10,2)` | maior que 0 |
+| `servico.ativo` | `BOOLEAN` | `NOT NULL`, por omissão `TRUE` |
+| `consumo.n_seq` | `INTEGER` | maior ou igual a 1 |
+| `consumo.quantidade` | `INTEGER` | maior ou igual a 1 |
+| `pagamento.valor` | `NUMERIC(10,2)` | maior que 0 |
+| `pagamento.metodo` | `VARCHAR(20)` | `numerario`, `cartao`, `transferencia` ou `mbway` |
+| `data_hora` (consumo e pagamento) | `TIMESTAMP` | `NOT NULL`, por omissão o instante atual |
+
+---
+
+## 2. Justificação do mapeamento ER → relacional
+
+As regras gerais (PK artificial, FK no lado N, FK `NOT NULL` para participação total, `ON DELETE RESTRICT`) estão na parte do Diogo e aplicam-se igualmente. Aqui fica só o que é próprio desta parte.
+
+| Elemento do modelo conceptual | Resultado relacional | Justificação |
+|---|---|---|
+| Entidade fraca `CONSUMO`, chave parcial `n_seq` | Tabela `consumo` com PK composta `(id_reserva, n_seq)`; `id_reserva` é parte da PK e FK | Regra do mapeamento de entidades fracas: a chave do dono entra na PK. Sozinho, `n_seq` não identifica um consumo (há um consumo 1 em cada reserva). |
+| Relacionamento identificador `TEM_CONSUMO` | Não gera tabela nem coluna extra | Fica representado pela FK `id_reserva`, que está dentro da PK. |
+| `n_seq` | `INTEGER` sem `IDENTITY` | Uma sequência global numeraria todos os consumos seguidos, e deixava de ser uma numeração por reserva. O valor é dado na inserção; na Fase 3, um trigger calcula `MAX(n_seq) + 1` dentro da reserva. |
+| `REFERE_SE_A`, CONSUMO (1,1) | FK `consumo.id_servico NOT NULL` | Cada consumo é de exatamente um serviço. |
+| `TEM_PAGAMENTO`, PAGAMENTO (1,1) | FK `pagamento.id_reserva NOT NULL` | Relacionamento 1:N; cada pagamento é de exatamente uma reserva. |
+| `PAGAMENTO` como entidade forte | PK própria `id_pagamento` | Decidido na Fase 1 (§7.3): os pagamentos são consultados por si (Q12). |
+| Atributo derivado `total` de `RESERVA` | Vista `v_reserva_total` | Não se guarda (RD12, RN16). A vista calcula alojamento, consumos, total, total pago e saldo a partir dos dados de base, por isso nunca fica desatualizada. Cada parcela é somada numa subconsulta à parte: um `JOIN` direto de `reserva_quarto`, `consumo` e `pagamento` multiplicava as linhas e inflacionava as somas. |
+
+### Decisões de implementação
+
+- **`ON DELETE RESTRICT` também em `fk_consumo_reserva`.** Numa entidade fraca, `CASCADE` seria a escolha habitual. Como as reservas nunca se apagam (RD14), `RESTRICT` mantém a mesma política em todo o modelo e evita que um `DELETE` por engano leve consumos consigo.
+- **`metodo` com `CHECK`, não com tabela de domínio**, pela mesma razão dos estados na parte do Diogo: conjunto fixo e pequeno (RN14). *Decisão em conjunto ainda por fechar.*
+- **`servico.ativo` em vez de apagar serviços.** Um serviço descontinuado mantém os consumos antigos e deixa de poder ser consumido (RN12, Fase 3).
+- **A vista inclui as reservas canceladas** com o total que teriam; quem consulta filtra pelo `estado`. *A rever em conjunto*: em alternativa, a vista pode pôr o total das canceladas a 0.
+
+---
+
+## 3. Normalização
+
+### 3.1 Tabelas desta parte
+
+| Tabela | Dependências funcionais relevantes | Análise |
+|---|---|---|
+| `servico` | `id_servico → nome, descricao, preco_unitario, ativo`; `nome → id_servico` | Os dois determinantes são chaves candidatas: **BCNF**. |
+| `pagamento` | `id_pagamento → data_hora, valor, metodo, id_reserva` | Nenhum atributo não-chave determina outro: **BCNF**. |
+| `consumo` | `(id_reserva, n_seq) → data_hora, quantidade, preco_unitario, id_servico` | Nada depende só de parte da chave (**2NF**); `id_servico ↛ preco_unitario` (ponto 1), logo sem dependências transitivas (**3NF**). O único determinante é a chave: **BCNF**. |
+
+**Pontos que merecem justificação**
+
+1. **`consumo.preco_unitario` não cria dependência transitiva.** Se fosse sempre o preço atual do serviço, haveria `id_servico → preco_unitario` e a coluna violaria a 3NF. Mas a RN13 fixa o preço no momento do consumo: nos dados, o mesmo serviço aparece a 7.50 € (2025) e a 8.50 € (2026). Logo `id_servico ↛ preco_unitario`. É o mesmo raciocínio do `preco_noite` na parte do Diogo.
+2. **`data_hora`, `quantidade` e `id_servico` dependem do consumo concreto** (chave inteira), não só de `id_reserva`.
+3. **O `total` não é guardado.** Dependeria de linhas de outras tabelas, por isso fica numa vista.
+
+### 3.2 Modelo completo
+
+As nove tabelas das duas partes estão em **BCNF**:
+
+- **1NF.** Atributos atómicos e sem grupos repetidos: os quartos, consumos e pagamentos de uma reserva estão em linhas próprias, não em listas.
+- **2NF.** Só `reserva_quarto` e `consumo` têm chave composta, e em ambas os atributos dependem da chave inteira.
+- **3NF/BCNF.** Os atributos que dependem de outra entidade vivem na tabela dessa entidade. Os preços copiados (`preco_noite`, `consumo.preco_unitario`) são factos próprios (RN09, RN13), não dependências transitivas.
+- **Sem decomposições.** O mapeamento do modelo conceptual já deu tabelas normalizadas.
+
+---
+
+## 4. Regras de negócio desta parte → mecanismo
+
+| Regra | Como é garantida | Estado |
+|---|---|---|
+| RN11 | Cancelada sem consumos: depende do `estado` de `reserva` | Fase 3 (trigger em `consumo`) |
+| RN12 | `CHECK (quantidade >= 1)`; reserva em curso e serviço ativo exigem consultar outras tabelas | Parte feita; resto na Fase 3 (trigger) |
+| RN13 | Preço copiado para `consumo.preco_unitario`, com `CHECK (preco_unitario > 0)`; testado em T09 | Feito |
+| RN14 | `CHECK (valor > 0)` e `CHECK (metodo IN (...))`; a data não futura fica para trigger | Parte feita; data na Fase 3 |
+| RN15 | Total pago ≤ total da reserva: exige somar várias tabelas | Fase 3 (trigger em `pagamento`) |
+| RN16 | Vista `v_reserva_total` | Feito |
+
+**Porque é que a data não futura (RN14) não fica num `CHECK`.** Um `CHECK (data_hora <= CURRENT_TIMESTAMP)` usa uma função que muda com o tempo; a documentação do PostgreSQL desaconselha `CHECK` com funções não imutáveis, porque um *restore* feito mais tarde pode dar resultados diferentes. Um trigger faz a mesma verificação sem esse problema.
+
+**Nota para os triggers da Fase 3.** Os dados de povoamento inserem as reservas já no estado final (por exemplo, consumos em reservas `concluida`). Um trigger que exija `estado = 'em_curso'` para inserir consumos tem de ser criado depois do povoamento.
+
+---
+
+## 5. Dados de povoamento
+
+[`dados/povoamento_servicos.sql`](../dados/povoamento_servicos.sql) tem 7 serviços, 13 consumos e 8 pagamentos, e assume as reservas 1 a 9 do núcleo.
+
+| Caso limite | Onde |
+|---|---|
+| Serviço inativo com consumos antigos | `Late check-out` |
+| Serviço nunca consumido | `Aluguer de bicicleta` (aparece em Q08 com 0) |
+| Consumo com preço diferente do atual (RN13) | Pequeno-almoço a 7.50 € na reserva de 2025 |
+| Reserva paga exatamente pelo total (saldo 0) | Reserva 1 |
+| Pagamento em prestações (sinal + restante) | Reserva 2 |
+| Concluída com saldo por pagar | Reserva 7 (saldo 80 €) |
+| Confirmada só com sinal, sem consumos | Reserva 5 |
+| Canceladas sem consumos nem pagamentos (RN11) | Reservas 6 e 8 |
+| Os quatro métodos de pagamento, em meses diferentes | Q12 |
+
+---
+
+## 6. Consultas Q08 a Q14
+
+Ficheiro: [`sql/consultas_q08_q14.sql`](../sql/consultas_q08_q14.sql).
+
+| Id | Interpretação e técnica |
+|---|---|
+| Q08 | Unidades e receita por serviço, com o preço de cada consumo (RN13). `LEFT JOIN` para mostrar serviços nunca consumidos. |
+| Q09 | Total (alojamento + serviços) das reservas em curso ou concluídas; canceladas e futuras não contam. Usa `v_reserva_total` e `RANK()`. |
+| Q10 | Clientes sem nenhum consumo em nenhuma reserva (`NOT EXISTS`). Inclui clientes sem reservas; `n_reservas` distingue-os. |
+| Q11 | Quartos sem reserva não cancelada nos últimos 12 meses. Depende de `CURRENT_DATE`. |
+| Q12 | Pagamentos por mês, uma coluna por método (`FILTER`) e o total do mês. |
+| Q13 | O modelo não guarda a data do cancelamento, por isso agrupa-se pelo mês de criação da reserva. `NULLIF` evita divisão por zero. |
+| Q14 | Reservas por funcionário, com `LEFT JOIN` para incluir quem não registou nenhuma. |
+
+---
+
+## 7. Validação
+
+Executado em PostgreSQL 18. Os testes estão em [`testes/fase2_servicos_pagamentos.sql`](../testes/fase2_servicos_pagamentos.sql) e correm-se com `psql -U postgres -d hotel -f testes/fase2_servicos_pagamentos.sql`. Cada teste corre numa transação desfeita no fim.
+
+| Teste | Resultado esperado | Resultado observado |
+|---|---|---|
+| T01 Consumo válido | Aceite | Aceite |
+| T02 `n_seq` repetido na mesma reserva | Recusado (`pk_consumo`) | Recusado |
+| T03 Mesmo `n_seq` noutra reserva | Aceite (chave parcial) | Aceite |
+| T04 Quantidade 0 | Recusado (`ck_consumo_quantidade`) | Recusado |
+| T05 Consumo de reserva inexistente | Recusado (`fk_consumo_reserva`) | Recusado |
+| T06 Consumo de serviço inexistente | Recusado (`fk_consumo_servico`) | Recusado |
+| T07 Serviço com nome repetido | Recusado (`uq_servico_nome`) | Recusado |
+| T08 Serviço com preço 0 | Recusado (`ck_servico_preco`) | Recusado |
+| T09 Mudar o preço de um serviço | Consumos antigos mantêm o preço | Mantêm |
+| T10 Apagar serviço com consumos | Recusado (`fk_consumo_servico`) | Recusado |
+| T11 Pagamento negativo | Recusado (`ck_pagamento_valor`) | Recusado |
+| T12 Método `paypal` | Recusado (`ck_pagamento_metodo`) | Recusado |
+| T13 Pagamento sem reserva | Recusado (`NOT NULL`) | Recusado |
+| T14 Apagar reserva com pagamentos | Recusado (`fk_pagamento_reserva`) | Recusado |
+| T15 Total da reserva 2 na vista | 915.00 € (calculado à mão) | 915.00 € |
