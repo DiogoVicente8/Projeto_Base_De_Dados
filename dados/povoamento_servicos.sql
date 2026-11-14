@@ -1,7 +1,4 @@
 -- Povoamento: servico, consumo e pagamento.
--- Corre DEPOIS dos dados do núcleo (consumos e pagamentos referem reservas).
--- Assume as reservas 1 a 9 do núcleo; se o Diogo usar outras, ajustar os id_reserva.
-
 -- servico
 INSERT INTO servico (nome, descricao, preco_unitario, ativo) VALUES
     ('Pequeno-almoço',      'Buffet das 7h30 às 10h30, por pessoa',        8.50, TRUE),   -- 1 (antes 7.50)

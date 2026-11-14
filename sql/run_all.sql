@@ -1,8 +1,10 @@
 -- Cria a base de dados do zero, pela ordem certa.
 -- Uso: psql -U postgres -d hotel -f sql/run_all.sql
--- ON_ERROR_STOP faz parar no primeiro erro, para não ficar a BD meio criada.
+-- ON_ERROR_STOP e a transação impedem uma recriação parcialmente aplicada.
 
 \set ON_ERROR_STOP on
+
+BEGIN;
 
 \echo '== 1. Apagar tabelas existentes'
 \ir drop.sql
@@ -19,5 +21,7 @@
 \echo '== 5. Dados de povoamento'
 \ir ../dados/povoamento_nucleo.sql
 \ir ../dados/povoamento_servicos.sql
+
+COMMIT;
 
 \echo '== Base de dados criada.'

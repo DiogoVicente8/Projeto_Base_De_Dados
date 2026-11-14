@@ -1,8 +1,8 @@
-# Fase 2: parte do Diogo (núcleo de alojamento)
+# Fase 2 — Projeto lógico e implementação
 
-Tabelas desta parte: `tipo_quarto`, `quarto`, `cliente`, `funcionario`, `reserva` e `reserva_quarto` (relacionamento `INCLUI` do modelo conceptual).
-Scripts: [`sql/drop.sql`](../sql/drop.sql) e [`sql/Table.sql`](../sql/Table.sql).
-Diagrama: [`modelos/modelo_relacional.md`](../modelos/modelo_relacional.md).
+Revisão integrada de 14 de novembro de 2026, confrontada com as secções 3, 4 e 6 do enunciado `bdad_proj_2627 (1).pdf` (organização e documentação nas páginas 2–3; Fase 2 nas páginas 6–7), disponível localmente nos Downloads. Os artefactos técnicos estão implementados e validados; a revisão do grupo, o commit e a tag de entrega continuam pendentes. A Fase 1 e os seus modelos foram preservados.
+
+
 
 ---
 
@@ -29,14 +29,16 @@ reserva_quarto(id_reserva, numero_quarto, preco_noite, n_hospedes, data_checkin_
 
 ### Chaves
 
+Todas as PK também são chaves candidatas. O NIF anulável tem unicidade condicional aos valores preenchidos (`UNIQUE` permite vários `NULL`); não é chave candidata da relação completa.
+
 | Tabela | Chave primária | Chaves candidatas | Chaves estrangeiras |
 |---|---|---|---|
-| `tipo_quarto` | `id_tipo` | `nome` | n/a |
-| `quarto` | `numero` | n/a | `id_tipo` |
-| `cliente` | `id_cliente` | `n_documento`, `nif` | n/a |
-| `funcionario` | `id_funcionario` | n/a | n/a |
-| `reserva` | `id_reserva` | n/a | `id_cliente`, `id_funcionario` |
-| `reserva_quarto` | `(id_reserva, numero_quarto)` | n/a | `id_reserva`, `numero_quarto` |
+| `tipo_quarto` | `id_tipo` | `id_tipo`; `nome` | n/a |
+| `quarto` | `numero` | `numero` | `id_tipo` |
+| `cliente` | `id_cliente` | `id_cliente`; `n_documento` | n/a |
+| `funcionario` | `id_funcionario` | `id_funcionario` | n/a |
+| `reserva` | `id_reserva` | `id_reserva` | `id_cliente`, `id_funcionario` |
+| `reserva_quarto` | `(id_reserva, numero_quarto)` | `(id_reserva, numero_quarto)` | `id_reserva`, `numero_quarto` |
 
 ### Domínios
 
@@ -68,11 +70,11 @@ reserva_quarto(id_reserva, numero_quarto, preco_noite, n_hospedes, data_checkin_
 
 ### Decisões de implementação
 
-- **`ON DELETE RESTRICT` em todas as FK.** A RD14 pede que reservas concluídas e canceladas se mantenham registadas; não se apaga um cliente, um quarto ou um tipo que tenha histórico.
+- **`ON DELETE RESTRICT` em todas as FK.** Protege as referências do histórico, impedindo apagar pais referenciados. Não proíbe apagar uma reserva sem dependentes; a proibição global de apagar histórico (RD14) terá de ser completada na Fase 3.
 - **`CHECK` em vez de `ENUM` para os estados.** É mais simples de alterar (basta substituir a restrição) e é declarativo, que o enunciado prefere.
 - **NIF como `VARCHAR(20)` sem validação de formato.** A RN08 só exige unicidade; um cliente estrangeiro pode ter um identificador fiscal com outro formato. Validar 9 dígitos seria inventar uma regra.
 - **`email`, `telefone` e `nacionalidade` aceitam `NULL`.** A RD03 lista-os, mas não os torna obrigatórios.
-- **Sem índices nesta fase.** Serão estudados na Fase 3, com base em consultas reais e `EXPLAIN ANALYZE`.
+- **Sem índices adicionais nesta fase.** As PK e restrições `UNIQUE` já criam índices automaticamente. Outros índices serão estudados na Fase 3.
 
 ---
 
@@ -86,7 +88,7 @@ reserva_quarto(id_reserva, numero_quarto, preco_noite, n_hospedes, data_checkin_
 |---|---|---|
 | `tipo_quarto` | `id_tipo → nome, descricao, capacidade_max, preco_base_noite`; `nome → id_tipo` | Todo o determinante é chave candidata: **BCNF** (logo 3NF). |
 | `quarto` | `numero → andar, estado, id_tipo` | `capacidade_max` e `preco_base_noite` dependem de `id_tipo`, não de `numero`. Por isso vivem em `tipo_quarto`; se estivessem em `quarto`, haveria dependência transitiva (`numero → id_tipo → capacidade_max`) e violaria a 3NF. Está em **BCNF**. |
-| `cliente` | `id_cliente → todos`; `n_documento → todos`; `nif → todos` | Os três determinantes são chaves candidatas: **BCNF**. Nenhum atributo não-chave determina outro. |
+| `cliente` | `id_cliente → todos`; `n_documento → todos` | Os dois determinantes são chaves candidatas: **BCNF**, pelas DF identificadas. O NIF é opcional e apenas único quando preenchido; não constitui chave candidata clássica de toda a relação. |
 | `funcionario` | `id_funcionario → nome, funcao` | Um nome não determina a função (dois funcionários podem ter o mesmo nome): **BCNF**. |
 | `reserva` | `id_reserva → todos` | Nenhum atributo não-chave determina outro; o `total` (derivado) não é guardado: **BCNF**. |
 | `reserva_quarto` | `(id_reserva, numero_quarto) → preco_noite, n_hospedes, data_checkin_real, data_checkout_real` | Todos os atributos dependem da chave **inteira**: não há dependências parciais (**2NF**) nem transitivas (**3NF**). Está em **BCNF**. |
@@ -97,7 +99,7 @@ reserva_quarto(id_reserva, numero_quarto, preco_noite, n_hospedes, data_checkin_
 2. **`preco_noite` em `reserva_quarto` não é redundância de `tipo_quarto.preco_base_noite`.** O preço é fixado no momento da reserva e pode diferir do preço base (RN09), por isso é um facto diferente: o preço acordado para esse quarto nessa reserva.
 3. **Não houve decomposições**, porque o modelo já resulta normalizado do mapeamento. Não foram feitas decomposições artificiais.
 
-A normalização de `servico`, `consumo` e `pagamento` fica na parte do João.
+A normalização de `servico`, `consumo` e `pagamento`, e a revisão do modelo completo pelo João, encontram-se nas secções seguintes.
 
 ---
 
@@ -113,7 +115,7 @@ A normalização de `servico`, `consumo` e `pagamento` fica na parte do João.
 | RN06 | `CHECK (n_hospedes >= 1)`; o limite pela capacidade do tipo exige consulta a outra tabela | Parte feita; resto na Fase 3 (trigger) |
 | RN07 | FK `id_cliente` e `id_funcionario` `NOT NULL` | Feito |
 | RN08 | `UNIQUE` em `n_documento` e `nif` | Feito |
-| RN09 | `CHECK (preco_noite > 0)`; o valor por omissão (preço base) é preenchido na inserção | Parte feita; "não muda depois" é garantido por o preço ser copiado, não referenciado |
+| RN09 | `CHECK (preco_noite > 0)`; preço acordado explícito no povoamento e independente do catálogo | Parcial: alterar o catálogo não altera o preço histórico. Não existe preenchimento automático pelo preço base; fica para a Fase 3. |
 | RN10 | `CHECK` do check-out posterior ao check-in; o check-in só em reserva confirmada exige consultar `reserva` | Parte feita; resto na Fase 3 (trigger) |
 | RN11 | Cancelada sem check-in: depende do `estado` de `reserva` | Fase 3 (trigger) |
 
@@ -121,30 +123,11 @@ As regras RN12 a RN16 (consumos, pagamentos e total) estão na parte do João.
 
 ---
 
-## 5. Validação
-
-Os scripts foram executados num PostgreSQL limpo (`drop.sql` seguido de `Table.sql`) sem erros. Testes feitos:
-
-| Teste | Resultado esperado | Resultado observado |
-|---|---|---|
-| Inserção válida em todas as tabelas | Aceite | Aceite |
-| Reserva com saída igual à entrada | Recusada (`ck_reserva_datas`) | Recusada |
-| Cliente com `n_documento` repetido | Recusado (`uq_cliente_n_documento`) | Recusado |
-| `reserva_quarto` com quarto inexistente | Recusada (FK) | Recusada |
-| Check-out sem check-in | Recusado (`ck_reserva_quarto_checkout`) | Recusado |
-| Apagar cliente com reservas | Recusado (`ON DELETE RESTRICT`) | Recusado |
-| Dois clientes com NIF nulo | Aceites | Aceites |
-
-Estes testes devem passar a ficar em `testes/` quando se fizerem os testes formais da Fase 3.
-
----
----
-
 # Fase 2: parte do João (serviços, consumos e pagamentos)
 
 Tabelas desta parte: `servico`, `pagamento` e `consumo` (entidade fraca `CONSUMO` do modelo conceptual), mais a vista `v_reserva_total` (atributo derivado `total`).
 Scripts: [`sql/servicos_pagamentos.sql`](../sql/servicos_pagamentos.sql), [`sql/vistas.sql`](../sql/vistas.sql), [`sql/run_all.sql`](../sql/run_all.sql) (corre tudo pela ordem certa) e [`sql/consultas_q08_q14.sql`](../sql/consultas_q08_q14.sql).
-Dados: [`dados/povoamento_servicos.sql`](../dados/povoamento_servicos.sql). Testes: [`testes/fase2_servicos_pagamentos.sql`](../testes/fase2_servicos_pagamentos.sql).
+Dados: [`dados/povoamento_servicos.sql`](../dados/povoamento_servicos.sql).
 
 ---
 
@@ -163,9 +146,9 @@ consumo(id_reserva, n_seq, data_hora, quantidade, preco_unitario, id_servico)
 
 | Tabela | Chave primária | Chaves candidatas | Chaves estrangeiras |
 |---|---|---|---|
-| `servico` | `id_servico` | `nome` | n/a |
-| `pagamento` | `id_pagamento` | n/a | `id_reserva` |
-| `consumo` | `(id_reserva, n_seq)` | n/a | `id_reserva`, `id_servico` |
+| `servico` | `id_servico` | `id_servico`; `nome` | n/a |
+| `pagamento` | `id_pagamento` | `id_pagamento` | `id_reserva` |
+| `consumo` | `(id_reserva, n_seq)` | `(id_reserva, n_seq)` | `id_reserva`, `id_servico` |
 
 | Atributo | Tipo SQL | Restrição |
 |---|---|---|
@@ -187,7 +170,7 @@ As regras gerais (PK artificial, FK no lado N, FK `NOT NULL` para participação
 |---|---|---|
 | Entidade fraca `CONSUMO`, chave parcial `n_seq` | Tabela `consumo` com PK composta `(id_reserva, n_seq)`; `id_reserva` é parte da PK e FK | Regra do mapeamento de entidades fracas: a chave do dono entra na PK. Sozinho, `n_seq` não identifica um consumo (há um consumo 1 em cada reserva). |
 | Relacionamento identificador `TEM_CONSUMO` | Não gera tabela nem coluna extra | Fica representado pela FK `id_reserva`, que está dentro da PK. |
-| `n_seq` | `INTEGER` sem `IDENTITY` | Uma sequência global numeraria todos os consumos seguidos, e deixava de ser uma numeração por reserva. O valor é dado na inserção; na Fase 3, um trigger calcula `MAX(n_seq) + 1` dentro da reserva. |
+| `n_seq` | `INTEGER` sem `IDENTITY` | Uma sequência global numeraria todos os consumos seguidos, e deixava de ser uma numeração por reserva. O valor é dado explicitamente na inserção. Qualquer atribuição automática futura terá de garantir a unicidade por reserva; não está implementada na Fase 2. |
 | `REFERE_SE_A`, CONSUMO (1,1) | FK `consumo.id_servico NOT NULL` | Cada consumo é de exatamente um serviço. |
 | `TEM_PAGAMENTO`, PAGAMENTO (1,1) | FK `pagamento.id_reserva NOT NULL` | Relacionamento 1:N; cada pagamento é de exatamente uma reserva. |
 | `PAGAMENTO` como entidade forte | PK própria `id_pagamento` | Decidido na Fase 1 (§7.3): os pagamentos são consultados por si (Q12). |
@@ -195,10 +178,10 @@ As regras gerais (PK artificial, FK no lado N, FK `NOT NULL` para participação
 
 ### Decisões de implementação
 
-- **`ON DELETE RESTRICT` também em `fk_consumo_reserva`.** Numa entidade fraca, `CASCADE` seria a escolha habitual. Como as reservas nunca se apagam (RD14), `RESTRICT` mantém a mesma política em todo o modelo e evita que um `DELETE` por engano leve consumos consigo.
-- **`metodo` com `CHECK`, não com tabela de domínio**, pela mesma razão dos estados na parte do Diogo: conjunto fixo e pequeno (RN14). *Decisão em conjunto ainda por fechar.*
+- **`ON DELETE RESTRICT` também em `fk_consumo_reserva`.** Numa entidade fraca, `CASCADE` seria a escolha habitual. A política de conservar reservas (RD14) fundamenta `RESTRICT`, que mantém a mesma opção em todo o modelo e impede apagar uma reserva enquanto tiver consumos. A restrição, por si só, não proíbe apagar reservas sem dependentes.
+- **`metodo` com `CHECK`, não com tabela de domínio**, pela mesma razão dos estados na parte do Diogo: conjunto fixo e pequeno (RN14). Decisão mantida nesta Fase 2, conforme RN14.
 - **`servico.ativo` em vez de apagar serviços.** Um serviço descontinuado mantém os consumos antigos e deixa de poder ser consumido (RN12, Fase 3).
-- **A vista inclui as reservas canceladas** com o total que teriam; quem consulta filtra pelo `estado`. *A rever em conjunto*: em alternativa, a vista pode pôr o total das canceladas a 0.
+- **A vista inclui as reservas canceladas** com o valor previsto de alojamento e consumos, mantendo o comportamento SQL existente. Esse total e o saldo calculado não representam necessariamente uma dívida exigível: o `estado` deve ser considerado na interpretação dos resultados. As consultas operacionais filtram pelo estado quando apropriado.
 
 ---
 
@@ -235,14 +218,14 @@ As nove tabelas das duas partes estão em **BCNF**:
 |---|---|---|
 | RN11 | Cancelada sem consumos: depende do `estado` de `reserva` | Fase 3 (trigger em `consumo`) |
 | RN12 | `CHECK (quantidade >= 1)`; reserva em curso e serviço ativo exigem consultar outras tabelas | Parte feita; resto na Fase 3 (trigger) |
-| RN13 | Preço copiado para `consumo.preco_unitario`, com `CHECK (preco_unitario > 0)`; testado em T09 | Feito |
+| RN13 | Preço histórico em `consumo.preco_unitario`, positivo; alterar o catálogo não o altera | Parcial: captura automática do preço do serviço no momento da inserção fica para a Fase 3. Não há bloqueio à alteração direta do preço histórico. |
 | RN14 | `CHECK (valor > 0)` e `CHECK (metodo IN (...))`; a data não futura fica para trigger | Parte feita; data na Fase 3 |
 | RN15 | Total pago ≤ total da reserva: exige somar várias tabelas | Fase 3 (trigger em `pagamento`) |
 | RN16 | Vista `v_reserva_total` | Feito |
 
-**Porque é que a data não futura (RN14) não fica num `CHECK`.** Um `CHECK (data_hora <= CURRENT_TIMESTAMP)` usa uma função que muda com o tempo; a documentação do PostgreSQL desaconselha `CHECK` com funções não imutáveis, porque um *restore* feito mais tarde pode dar resultados diferentes. Um trigger faz a mesma verificação sem esse problema.
+**Data não futura (RN14).** A Fase 2 garante data obrigatória, valor positivo e método válido. A validação temporal do instante de inserção está explicitamente adiada para a Fase 3; `DEFAULT CURRENT_TIMESTAMP` não impede uma data futura fornecida manualmente. Não se apresenta esta parte como já garantida.
 
-**Nota para os triggers da Fase 3.** Os dados de povoamento inserem as reservas já no estado final (por exemplo, consumos em reservas `concluida`). Um trigger que exija `estado = 'em_curso'` para inserir consumos tem de ser criado depois do povoamento.
+**Dados históricos e Fase 3.** O povoamento representa uma fotografia com reservas já concluídas e serviços entretanto desativados. O estado atual não demonstra o estado no instante de cada consumo. A futura validação de transições e de carregamentos históricos terá de distinguir estes casos. Nesta fase não foram criados triggers.
 
 ---
 
@@ -280,24 +263,165 @@ Ficheiro: [`sql/consultas_q08_q14.sql`](../sql/consultas_q08_q14.sql).
 
 ---
 
-## 7. Validação
+# Revisão integrada e evidência de execução (14/11/2026)
 
-Executado em PostgreSQL 18. Os testes estão em [`testes/fase2_servicos_pagamentos.sql`](../testes/fase2_servicos_pagamentos.sql) e correm-se com `psql -U postgres -d hotel -f testes/fase2_servicos_pagamentos.sql`. Cada teste corre numa transação desfeita no fim.
+## Povoamento do núcleo e compatibilidade com vendas
 
-| Teste | Resultado esperado | Resultado observado |
+Os dados são fictícios e têm como referência operacional 14/11/2026. Os IDs
+são atribuídos pela ordem dos INSERT após recriação das tabelas. Não há
+`OVERRIDING SYSTEM VALUE` nem alterações manuais das sequências.
+As reservas 1–9 correspondem às referências dos dados do João; a reserva 10
+acrescenta a estadia adjacente à reserva 1. As datas fixas mantêm os resultados
+reproduzíveis; os estados representam esta fotografia, não avançam com o relógio.
+
+| Caso | Evidência nos dados |
+|---|---|
+| Quarto em manutenção | 105, sem reservas |
+| NIF opcional | Clientes 4 e 8 com `NULL` |
+| Cliente sem reservas | Cliente 9 |
+| Funcionário sem reservas | Funcionário 4 |
+| Reserva com vários quartos | Reserva 2, quartos 201 e 301, cinco noites |
+| Canceladas sem check-in/consumos/pagamentos | Reservas 6 e 8 |
+| Cancelada não bloqueia disponibilidade | Reserva 6 coincide com a reserva 1 |
+| Períodos adjacentes sem sobreposição | Reserva 1 sai a 08/06 e reserva 10 entra nesse dia, quarto 101 |
+| Estadia entre meses | Reserva 3, 31/07 a 03/08; uma noite em julho e duas em agosto |
+| Estadia em curso | Reserva 4, check-in real e sem check-out |
+| Reserva confirmada futura | Reserva 5, sinal de 273 €, 30% de 910 € |
+| Preços históricos | Reserva 9; alojamento a 82,50 €, consumos a preços antigos |
+
+| Reserva | Alojamento | Consumos | Total | Pago | Saldo observado |
+|---|---:|---:|---:|---:|---:|
+| 1 | 150,00 | 47,00 | 197,00 | 197,00 | 0,00 |
+| 2 | 700,00 | 215,00 | 915,00 | 915,00 | 0,00 |
+| 3 | 240,00 | 0,00 | 240,00 | 240,00 | 0,00 |
+| 4 | 325,00 | 58,50 | 383,50 | 100,00 | 283,50 |
+| 5 | 910,00 | 0,00 | 910,00 | 273,00 | 637,00 |
+| 6 (cancelada) | 150,00 | 0,00 | 150,00 | 0,00 | 150,00 previsto |
+| 7 | 110,00 | 20,00 | 130,00 | 50,00 | 80,00 |
+| 8 (cancelada) | 160,00 | 0,00 | 160,00 | 0,00 | 160,00 previsto |
+| 9 | 330,00 | 40,50 | 370,50 | 370,50 | 0,00 |
+| 10 | 50,00 | 0,00 | 50,00 | 0,00 | 50,00 |
+
+A reserva 2 demonstra a prevenção de multiplicação de somas na vista: dois
+quartos, seis consumos e dois pagamentos resultam em 915 €, sem duplicações.
+
+## Interpretação e resultados das consultas
+
+Q01–Q03 usam CTE `parametros`, que pode ser alterada sem mudar a consulta.
+Q06 usa início no primeiro dia de um mês e fim exclusivo, com referência
+fixa em 14/11/2026. Mede noites reais decorridas por quarto, pela diferença
+entre as datas de check-in/out; não mede horas nem ocupação prevista. Uma
+estadia sem checkout é cortada na referência. O denominador é o número total
+de quartos do tipo vezes as noites decorridas do mês (no mês corrente,
+até à referência exclusiva). O inventário inclui manutenção: não há histórico
+que permita reconstruir noites indisponíveis. Tipos com quartos mas sem
+ocupação aparecem com 0%; tipos sem quartos não têm denominador e não são
+listados. Q07 mede a duração real em noites por quarto de estadias concluídas;
+se não existirem, devolve contagem zero e média `NULL`.
+
+Q13 conserva a interpretação existente: taxa das reservas criadas em cada mês
+que estão canceladas. Não mede a data do evento de cancelamento, que o modelo
+não guarda. Esta distinção evita atribuir ao SQL informação inexistente.
+
+| Consulta | Resultado observado com os parâmetros de exemplo |
+|---|---|
+| Q01 | 13 quartos livres em 08–09/06/2026; exclui 101 ocupado pela reserva 10 e 105 em manutenção |
+| Q02 | Cliente 1: reservas 1 e 10, com quarto 101 |
+| Q03 | 08/06/2026: check-out da reserva 1 e check-in da reserva 10 |
+| Q04 | Dez linhas, com os totais da tabela anterior |
+| Q05 | Reservas concluídas 7 e 10, com saldos 80 € e 50 € |
+| Q06 | 44 linhas (janeiro–novembro, quatro tipos); duplos: julho 6/248 = 2,42%, agosto 2/248 = 0,81%; suites julho 5/62 = 8,06%; duplos novembro 4/104 = 3,85% |
+| Q07 | Duplo: seis estadias, média 3,00 noites; suite: uma, média 5,00; individual e familiar sem estadias concluídas |
+| Q08 | Pequeno-almoço lidera com 14 unidades e 116 €; bicicleta aparece com zero |
+| Q09 | Bruno Costa em primeiro, 915 €; seis clientes com estadias em curso/concluídas |
+| Q10 | Clientes 3, 5, 6 e 9 sem consumos; o último sem reservas |
+| Q11 | Dez quartos, incluindo 203 (só estadia de 2025), 204 (só cancelada) e 302 (só futura), à data de 14/11/2026 |
+| Q12 | Sete meses com pagamentos; junho de 2026 totaliza 397 € |
+| Q13 | Maio de 2026: uma cancelada em três reservas (33,3%); novembro: uma em duas (50,0%) |
+| Q14 | Marta Almeida lidera com cinco reservas; Tiago Melo aparece com zero |
+
+Q08–Q14 foram preservadas sem alterações. Todas as catorze consultas foram
+executadas e os resultados acima comparados com valores de referência.
+
+## Recriação e ordem das dependências
+
+`run_all.sql` executa drop → núcleo → vendas → vista → povoamento do núcleo →
+povoamento de vendas. O script usa `BEGIN`/`COMMIT` e `ON_ERROR_STOP`; os
+`\ir` são relativos ao próprio script, independentemente da pasta de execução.
+O utilizador cria primeiro a base com `createdb`, conforme o README.
+
+Foram realizadas duas recriações completas consecutivas, ambas sem erros e
+com as mesmas contagens: 4 tipos, 15 quartos, 9 clientes, 4 funcionários,
+10 reservas, 11 associações, 7 serviços, 13 consumos e 8 pagamentos (81 registos).
+O drop deixou zero objetos de relação no schema `public`, incluindo tabelas,
+sequências e vista. Os `NOTICE` de objetos inexistentes e de remoção em cascata
+da vista são esperados. A BD foi novamente criada e validada no fim.
+
+## Rastreabilidade dos requisitos de dados
+
+| Requisito | Implementação e exploração |
+|---|---|
+| RD01 | `quarto`, incluindo manutenção; Q01/Q11 |
+| RD02 | `tipo_quarto` e FK em `quarto`; Q01/Q06/Q07 |
+| RD03 | `cliente`, documento único e NIF opcional; Q02/Q09/Q10 |
+| RD04 | `funcionario`; Q14 |
+| RD05 | `reserva`, datas e estado; Q02/Q03/Q13 |
+| RD06 | FK obrigatórias para cliente e funcionário; Q02/Q14 |
+| RD07 | `reserva_quarto`, preço e hóspedes; reserva 2 com dois quartos; mínimo global adiado |
+| RD08 | Check-in/out em `reserva_quarto`; Q06/Q07 |
+| RD09 | `servico`, preço atual e ativo; Q08 |
+| RD10 | `consumo`, chave composta e preço histórico; Q08/Q10 |
+| RD11 | `pagamento`, valor e método; Q12 |
+| RD12 | `v_reserva_total`, sem total guardado; Q04/Q05/Q09 |
+| RD13 | Disponibilidade por período e ocupação real; Q01/Q06 |
+| RD14 | Histórico preservado no povoamento e referências protegidas por RESTRICT; proibição global de apagar histórico adiada |
+
+## Limites de integridade e trabalho reservado para a Fase 3
+
+As tabelas anteriores cobrem RN01–RN16. Estão garantidas declarativamente
+RN01, RN02, RN07 e RN08; RN16 é calculada pela vista. São parciais RN05
+(período único feito), RN06 (mínimo feito), RN09 (preço positivo e independente
+do catálogo), RN10 (ordem dos timestamps), RN12 (quantidade), RN13 (preço
+histórico independente) e RN14 (valor/método/data obrigatória).
+RN03, RN04, o mínimo de um quarto de RN05, os restantes limites e transições
+de RN06/RN10/RN11/RN12, a captura de preços de RN09/RN13, a data não futura
+de RN14 e RN15 requerem trabalho adicional na Fase 3. Guardar o preço não
+impede a sua alteração direta nem valida automaticamente a origem do valor.
+
+A futura implementação terá de considerar inserções e alterações nas tabelas
+relacionadas, não apenas na tabela filha. Por exemplo, alterar o período ou
+cancelar uma reserva não pode contornar RN03/RN11; reduzir o total de uma
+reserva já paga não pode contornar RN15. Estas observações documentam os
+limites atuais; não foram implementados mecanismos da Fase 3.
+
+## Auditoria final ao enunciado, secções 6.1–6.5
+
+O requisito 6.5 exige iniciar a implementação das necessidades de informação,
+não concluir todas as consultas Q01–Q14. As consultas já presentes são
+suficientes e foram preservadas. Os testes formais ficam para a Fase 3. Na revisão anterior do âmbito, executou-se apenas
+a criação e o povoamento pelo `run_all.sql`, duas vezes consecutivas em
+PostgreSQL 18.6, sem erros. As nove tabelas ficaram com 4 tipos, 15 quartos,
+9 clientes, 4 funcionários, 10 reservas, 11 associações, 7 serviços, 13 consumos
+e 8 pagamentos: 81 registos no total.
+
+O utilizador confirmou também a execução local na base `Alojamento`: criação
+das nove tabelas, povoamento completo, criação de `v_reserva_total`, Q08–Q14
+sem erros e totais/saldos corretos nas dez reservas. Estes resultados locais
+são informação fornecida pelo utilizador. Nesta revisão exclusivamente
+documental não se executaram scripts SQL. Os comandos
+PowerShell para reproduzir a base local estão no README.
+
+| Requisito | Estado técnico | Evidência |
 |---|---|---|
-| T01 Consumo válido | Aceite | Aceite |
-| T02 `n_seq` repetido na mesma reserva | Recusado (`pk_consumo`) | Recusado |
-| T03 Mesmo `n_seq` noutra reserva | Aceite (chave parcial) | Aceite |
-| T04 Quantidade 0 | Recusado (`ck_consumo_quantidade`) | Recusado |
-| T05 Consumo de reserva inexistente | Recusado (`fk_consumo_reserva`) | Recusado |
-| T06 Consumo de serviço inexistente | Recusado (`fk_consumo_servico`) | Recusado |
-| T07 Serviço com nome repetido | Recusado (`uq_servico_nome`) | Recusado |
-| T08 Serviço com preço 0 | Recusado (`ck_servico_preco`) | Recusado |
-| T09 Mudar o preço de um serviço | Consumos antigos mantêm o preço | Mantêm |
-| T10 Apagar serviço com consumos | Recusado (`fk_consumo_servico`) | Recusado |
-| T11 Pagamento negativo | Recusado (`ck_pagamento_valor`) | Recusado |
-| T12 Método `paypal` | Recusado (`ck_pagamento_metodo`) | Recusado |
-| T13 Pagamento sem reserva | Recusado (`NOT NULL`) | Recusado |
-| T14 Apagar reserva com pagamentos | Recusado (`fk_pagamento_reserva`) | Recusado |
-| T15 Total da reserva 2 na vista | 915.00 € (calculado à mão) | 915.00 € |
+| 6.1 Modelo relacional | Cumprido | Nove relações, atributos, domínios completos, chaves candidatas corrigidas, PK/FK/restrições e justificação ER → relacional |
+| 6.2 Normalização | Cumprido | DF das nove tabelas, análise de 1NF/2NF/3NF e BCNF pelas DF identificadas; sem decomposições artificiais; ressalva do NIF anulável |
+| 6.3 PostgreSQL | Cumprido | Nove tabelas e vista; PK/FK/UQ/CK nomeadas, identidades, NUMERIC e reprodução completa documentada |
+| 6.4 Dados | Cumprido | Dois scripts compatíveis, 81 registos, casos normais e limite e totais/saldos coerentes |
+| 6.5 Início das consultas | Cumprido | Início cumprido pelas consultas existentes; Q08–Q14 validadas e Q01–Q07 preservadas; interpretações documentadas |
+
+A estrutura, as ligações e os comandos do README foram atualizados. O modelo
+conceptual e `docs/fase1.md` não foram modificados. Os nomes existentes dos
+scripts foram mantidos para preservar referências. A tag local da Fase 1
+continua `v1.0-e1`; não existem as tags exatas `v1.0` e `v2.0`. A revisão pelo
+grupo, os commits, o push e a criação das tags são tarefas manuais pendentes,
+conforme pedido. Esta validação técnica não constitui uma entrega Git publicada.
