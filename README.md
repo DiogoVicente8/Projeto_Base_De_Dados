@@ -26,12 +26,12 @@ O projeto desenvolve-se em três fases incrementais, todas neste repositório. C
 | Fase | Trabalho principal | Tag | Estado |
 |---|---|---|---|
 | 1 | Análise e modelação conceptual | `v1.0` | documentação e modelo conceptual concluídos; tag existente `v1.0-e1` |
-| 2 | Projeto lógico e implementação | `v2.0` | requisitos 6.1–6.5 cumpridos; revisão final e tag de entrega pendentes |
+| 2 | Projeto lógico e implementação | `v2.0` | requisitos 6.1–6.5 cumpridos; revisão final; tag existente `v2-0-e2` |
 | 3 | Exploração, controlo de acesso e testes | `v3.0` | por fazer |
 
 ## Modelo conceptual
 
-O modelo conceptual (Fase 1) está representado em **notação de Chen** em [`modelos/modelo_conceptual.drawio`](modelos/modelo_conceptual.drawio) (editável) e [`modelos/modelo_conceptual.png`](modelos/modelo_conceptual.png). Abaixo está uma versão equivalente em Mermaid (notação pé de galinha), para consulta rápida diretamente no GitHub.
+O modelo conceptual (Fase 1) está representado em **notação de Chen** em [`modelos/modelo_conceptual.drawio`](modelos/modelo_conceptual.drawio) (editável) e [`modelos/modelo_conceptual.png`](modelos/modelo_conceptual.png). Abaixo está uma versão equivalente em Mermaid, para consulta rápida diretamente no GitHub.
 
 ```mermaid
 erDiagram
